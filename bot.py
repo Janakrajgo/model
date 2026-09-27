@@ -101,32 +101,40 @@ def _count_contexts() -> dict[str, int]:
 def preload_dataset():
     """Preload expanded dataset into contexts store if available."""
     expanded_dir = config.EXPANDED_DIR
-    if not (expanded_dir.exists() and (expanded_dir / "categories").exists()):
-        return
+    if expanded_dir.exists() and (expanded_dir / "categories").exists():
+        # Categories
+        for f in (expanded_dir / "categories").glob("*.json"):
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+                contexts[("category", data["slug"])] = {"version": 1, "payload": data}
 
-    # Categories
-    for f in (expanded_dir / "categories").glob("*.json"):
-        with open(f, encoding="utf-8") as fp:
-            data = json.load(fp)
-            contexts[("category", data["slug"])] = {"version": 1, "payload": data}
+        # Merchants
+        for f in (expanded_dir / "merchants").glob("*.json"):
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+                contexts[("merchant", data["merchant_id"])] = {"version": 1, "payload": data}
 
-    # Merchants
-    for f in (expanded_dir / "merchants").glob("*.json"):
-        with open(f, encoding="utf-8") as fp:
-            data = json.load(fp)
-            contexts[("merchant", data["merchant_id"])] = {"version": 1, "payload": data}
+        # Customers
+        for f in (expanded_dir / "customers").glob("*.json"):
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+                contexts[("customer", data["customer_id"])] = {"version": 1, "payload": data}
 
-    # Customers
-    for f in (expanded_dir / "customers").glob("*.json"):
-        with open(f, encoding="utf-8") as fp:
-            data = json.load(fp)
-            contexts[("customer", data["customer_id"])] = {"version": 1, "payload": data}
-
-    # Triggers
-    for f in (expanded_dir / "triggers").glob("*.json"):
-        with open(f, encoding="utf-8") as fp:
-            data = json.load(fp)
-            contexts[("trigger", data["id"])] = {"version": 1, "payload": data}
+        # Triggers
+        for f in (expanded_dir / "triggers").glob("*.json"):
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+                contexts[("trigger", data["id"])] = {"version": 1, "payload": data}
+        logger.info(f"Loaded contexts from directory: {expanded_dir}")
+    else:
+        # Fallback to embedded dataset for zero-config cloud deployments
+        try:
+            from embedded_dataset import get_embedded_contexts
+            embedded = get_embedded_contexts()
+            contexts.update(embedded)
+            logger.info(f"Loaded {len(embedded)} contexts from embedded dataset fallback.")
+        except Exception as e:
+            logger.warning(f"Could not load embedded dataset fallback: {e}")
 
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -138,6 +146,11 @@ async def serve_ui():
     if index_file.exists():
         with open(index_file, encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
+    try:
+        from ui_html import HTML_CONTENT
+        return HTMLResponse(content=HTML_CONTENT)
+    except Exception as e:
+        logger.warning(f"Could not load embedded UI: {e}")
     return HTMLResponse("<h1>Vera AI Assistant Running</h1>")
 
 
